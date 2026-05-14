@@ -142,6 +142,8 @@ Supported sheet names match title-cased table names, for example:
 - `Stage Definitions`
 - `Import Batches`
 
+Excel import accepts both database-style headers such as `company_id` and planning-workbook headers such as `Company ID`, `Bid Due Date`, `Analyzed?`, and `Estimating Department Email`. The planning workbook's `Import Log` sheet is treated as import batch history, and its stage-definition headers are normalized into the app's stage lookup format.
+
 ## Demo data
 
 Seed a small coherent sample pipeline with:

@@ -71,8 +71,153 @@ def test_excel_template_export_import_round_trip(tmp_path: Path) -> None:
         assert summary["companies"] >= 1
         assert session.get(Company, "CO-TEST").company_name == "ABC Construction"
         assert session.get(EmailActivity, "EM-TEST").conversation_id == "CONV-1"
+        lost_stage = session.scalars(select(StageDefinition).where(StageDefinition.stage_name == "Lost")).first()
+        assert lost_stage is not None
+        assert lost_stage.stage_status == "closed"
         counts = dashboard_counts(session)
         assert "Emails needing project assignment" in counts
+
+
+def test_import_accepts_planning_workbook_headers(tmp_path: Path) -> None:
+    from construction_db.models import Attachment, BidOpportunity, FollowUp, ImportBatch, Project
+
+    workbook_path = tmp_path / "planning_headers.xlsx"
+    with pd.ExcelWriter(workbook_path, engine="openpyxl") as writer:
+        pd.DataFrame(
+            [
+                {
+                    "Import Batch ID": "IMPORT-PLAN",
+                    "Import Date": "2026-05-13",
+                    "Selected Senders": "pat@planning.example",
+                    "Emails Found": 1,
+                    "Emails Imported": 1,
+                    "Warnings / Notes": "Planning workbook import",
+                }
+            ]
+        ).to_excel(writer, sheet_name="Import Log", index=False)
+        pd.DataFrame(
+            [
+                {
+                    "Company ID": "CO-PLAN",
+                    "Company Name": "Planning GC",
+                    "Company Type": "General Contractor",
+                    "Estimating Department Email": "estimating@planning.example",
+                    "Source Domain": "planning.example",
+                }
+            ]
+        ).to_excel(writer, sheet_name="Companies", index=False)
+        pd.DataFrame(
+            [
+                {
+                    "Contact ID": "CT-PLAN",
+                    "Company ID": "CO-PLAN",
+                    "Company Name": "Planning GC",
+                    "Full Name": "Pat Planner",
+                    "Email": "pat@planning.example",
+                    "Phone": "555-0200",
+                }
+            ]
+        ).to_excel(writer, sheet_name="Contacts", index=False)
+        pd.DataFrame(
+            [
+                {
+                    "Project ID": "PR-PLAN",
+                    "Project Name": "Planning Project",
+                    "Job Address": "100 Planning Way",
+                    "ZIP": "06118",
+                    "Project Stage": "Estimating",
+                }
+            ]
+        ).to_excel(writer, sheet_name="Projects", index=False)
+        pd.DataFrame(
+            [
+                {
+                    "Bid ID": "BD-PLAN",
+                    "Project ID": "PR-PLAN",
+                    "GC Company ID": "CO-PLAN",
+                    "Primary Contact ID": "CT-PLAN",
+                    "Bid Due Date": "2026-05-20",
+                    "Follow-Up Date": "2026-05-19",
+                }
+            ]
+        ).to_excel(writer, sheet_name="Bid Opportunities", index=False)
+        pd.DataFrame(
+            [
+                {
+                    "Email Activity ID": "EM-PLAN",
+                    "Outlook Message ID": "MSG-PLAN",
+                    "Conversation ID": "CONV-PLAN",
+                    "From Email": "pat@planning.example",
+                    "Subject": "Planning bid invite",
+                    "Full Message Body": "Full planning body",
+                    "Project ID": "PR-PLAN",
+                    "Bid ID": "BD-PLAN",
+                    "Import Batch ID": "IMPORT-PLAN",
+                    "Has Attachments": "True",
+                    "Attachment Count": 1,
+                }
+            ]
+        ).to_excel(writer, sheet_name="Email Activity", index=False)
+        pd.DataFrame(
+            [
+                {
+                    "Attachment ID": "AT-PLAN",
+                    "Email Activity ID": "EM-PLAN",
+                    "File Name": "planning.pdf",
+                    "File Type": "pdf",
+                    "Analyzed?": "True",
+                    "Extracted Job Address": "100 Planning Way",
+                }
+            ]
+        ).to_excel(writer, sheet_name="Attachments", index=False)
+        pd.DataFrame(
+            [
+                {
+                    "Follow Up ID": "FU-PLAN",
+                    "Project ID": "PR-PLAN",
+                    "Bid ID": "BD-PLAN",
+                    "Contact ID": "CT-PLAN",
+                    "Company ID": "CO-PLAN",
+                    "Follow Up Type": "Bid due reminder",
+                    "Due Date": "2026-05-19",
+                    "Status": "Open",
+                    "Created From Email ID": "EM-PLAN",
+                }
+            ]
+        ).to_excel(writer, sheet_name="Follow Ups", index=False)
+        pd.DataFrame(
+            [
+                {
+                    "Stage Name": "Planning Closed",
+                    "Applies To": "Bid",
+                    "Stage Order": 99,
+                    "Is Closed Stage": "True",
+                }
+            ]
+        ).to_excel(writer, sheet_name="Stage Definitions", index=False)
+
+    engine = make_engine(tmp_path / "planning_headers.sqlite3")
+    initialize_database(engine)
+    SessionLocal = create_session_factory(engine)
+
+    with SessionLocal() as session:
+        summary = import_from_excel(session, workbook_path)
+
+        assert summary["companies"] == 1
+        assert summary["import_batches"] == 1
+        assert summary["stage_definitions"] == 1
+        assert session.get(ImportBatch, "IMPORT-PLAN").errors_warnings == "Planning workbook import"
+        assert session.get(Company, "CO-PLAN").estimating_email == "estimating@planning.example"
+        assert session.get(Contact, "CT-PLAN").company_id == "CO-PLAN"
+        assert session.get(Project, "PR-PLAN").zip == "06118"
+        assert session.get(BidOpportunity, "BD-PLAN").follow_up_date == "2026-05-19"
+        assert session.get(EmailActivity, "EM-PLAN").has_attachments is True
+        assert session.get(Attachment, "AT-PLAN").analyzed is True
+        assert session.get(FollowUp, "FU-PLAN").created_from_email_id == "EM-PLAN"
+        imported_stage = session.scalars(select(StageDefinition).where(StageDefinition.stage_name == "Planning Closed")).one()
+        assert imported_stage.stage_type == "bid_stage"
+        assert imported_stage.stage_status == "closed"
+        assert imported_stage.sort_order == 99
 
 
 def test_natural_key_upsert_preserves_existing_email_and_contact_ids(tmp_path: Path) -> None:
