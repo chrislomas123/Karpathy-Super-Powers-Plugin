@@ -2,3 +2,8 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+/construction_platform.sqlite3
+/construction_platform.sqlite3-*
+/construction_platform.sqlite3-shm
+/construction_platform.sqlite3-wal
+/construction_platform_backup_*.sqlite3

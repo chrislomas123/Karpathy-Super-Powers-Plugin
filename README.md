@@ -79,6 +79,21 @@ To use a different database file:
 python app.py --db ./construction_platform.sqlite3
 ```
 
+## Windows double-click launchers
+
+On Windows, the repo includes three batch files for day-to-day use from File Explorer:
+
+1. `Setup Environment.bat` - run this once to create `.venv` and install requirements.
+2. `Load Planning Workbook.bat` - imports `N:\Chris M\AI\Desktop Contact Database & Operating Platform..xlsx` into `construction_platform.sqlite3` next to the repo, with backup protection if data already exists.
+3. `Start App.bat` - opens the desktop app using the same repo-local `construction_platform.sqlite3` database.
+
+Recommended first run:
+
+```text
+Setup Environment.bat
+Load Planning Workbook.bat
+Start App.bat
+```
 
 ## Headless command-line workflows
 

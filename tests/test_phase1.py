@@ -269,6 +269,39 @@ def test_bootstrap_workbook_backs_up_existing_user_data(tmp_path: Path) -> None:
         assert session.get(Company, "CO-BOOT") is None
 
 
+def test_windows_launcher_files_are_present_and_point_to_app_workflows() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    launchers = {
+        "Setup Environment.bat": [
+            "python -m venv .venv",
+            "py -3 -m venv .venv",
+            "pip install -r requirements.txt",
+        ],
+        "Load Planning Workbook.bat": [
+            ".venv\\Scripts\\python.exe",
+            "bootstrap-workbook",
+            "Desktop Contact Database & Operating Platform..xlsx",
+            "construction_platform.sqlite3",
+            "echo \"%APP_DB%\"",
+            "echo \"%WORKBOOK%\"",
+        ],
+        "Start App.bat": [
+            ".venv\\Scripts\\python.exe",
+            "app.py",
+            "construction_platform.sqlite3",
+            " run",
+            "echo \"%APP_DB%\"",
+        ],
+    }
+
+    for launcher_name, expected_snippets in launchers.items():
+        text = (repo_root / launcher_name).read_text(encoding="utf-8")
+        assert "cd /d \"%~dp0\"" in text
+        assert "Setup Environment.bat" in text or launcher_name == "Setup Environment.bat"
+        for snippet in expected_snippets:
+            assert snippet in text
+
+
 def test_natural_key_upsert_preserves_existing_email_and_contact_ids(tmp_path: Path) -> None:
     engine = make_engine(tmp_path / "dedupe.sqlite3")
     initialize_database(engine)
