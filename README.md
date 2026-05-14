@@ -86,6 +86,7 @@ The app can also manage the database without launching the PySide6 UI. This is u
 
 ```bash
 python app.py --db ./construction_platform.sqlite3 init-db
+python app.py --db ./construction_platform.sqlite3 bootstrap-workbook "N:\Chris M\AI\Desktop Contact Database & Operating Platform..xlsx"
 python app.py create-template ./construction_platform_template.xlsx
 python app.py --db ./construction_platform.sqlite3 import-excel ./existing_workbook.xlsx
 python app.py --db ./construction_platform.sqlite3 export-excel ./construction_platform_export.xlsx
@@ -102,6 +103,8 @@ python app.py --db ./construction_platform.sqlite3 run
 ```
 
 The `review-queue` command reports records needing cleanup, including emails missing project assignment, attachments not analyzed, projects missing job address, contacts missing phone/cell, and overdue follow-ups.
+
+The `bootstrap-workbook` command is the easiest first-run path for the planning workbook. It initializes the database, creates a backup first if user data already exists, imports the workbook, generates default follow-ups, prints dashboard counts, and shows the next command to open the desktop app.
 
 The `search` command performs a global search across companies, contacts, projects, bid opportunities, email activity, attachments, and follow-ups.
 
@@ -143,6 +146,16 @@ Supported sheet names match title-cased table names, for example:
 - `Import Batches`
 
 Excel import accepts both database-style headers such as `company_id` and planning-workbook headers such as `Company ID`, `Bid Due Date`, `Analyzed?`, and `Estimating Department Email`. The planning workbook's `Import Log` sheet is treated as import batch history, and its stage-definition headers are normalized into the app's stage lookup format.
+
+## Planning workbook bootstrap
+
+To load the current planning workbook into a local app database:
+
+```bash
+python app.py --db ./construction_platform.sqlite3 bootstrap-workbook "N:\Chris M\AI\Desktop Contact Database & Operating Platform..xlsx"
+```
+
+If `./construction_platform.sqlite3` already contains user data, the command creates a timestamped backup next to it before importing. After the import, it generates default bid follow-ups and prints the next command to open the desktop app.
 
 ## Demo data
 

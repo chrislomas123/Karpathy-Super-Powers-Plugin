@@ -24,6 +24,12 @@ def build_parser() -> argparse.ArgumentParser:
     import_cmd = subparsers.add_parser("import-excel", help="Import records from an Excel workbook")
     import_cmd.add_argument("workbook", help="Input .xlsx path")
 
+    bootstrap_cmd = subparsers.add_parser(
+        "bootstrap-workbook",
+        help="Import a planning workbook, back up existing data if needed, and print next steps",
+    )
+    bootstrap_cmd.add_argument("workbook", help="Input .xlsx planning workbook path")
+
     export_cmd = subparsers.add_parser("export-excel", help="Export all tables to an Excel workbook")
     export_cmd.add_argument("output", help="Output .xlsx path")
 
@@ -102,6 +108,13 @@ def main() -> int:
         print("Imported rows:")
         for table_name, count in summary.items():
             print(f"  {table_name}: {count}")
+        return 0
+    if command == "bootstrap-workbook":
+        from construction_db.bootstrap import bootstrap_workbook, format_bootstrap_summary
+
+        with session_factory() as session:
+            summary = bootstrap_workbook(session, db_path, args.workbook)
+        print(format_bootstrap_summary(summary))
         return 0
     if command == "export-excel":
         from construction_db.excel_io import export_to_excel

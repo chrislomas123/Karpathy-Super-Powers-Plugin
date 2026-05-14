@@ -220,6 +220,55 @@ def test_import_accepts_planning_workbook_headers(tmp_path: Path) -> None:
         assert imported_stage.sort_order == 99
 
 
+def test_bootstrap_workbook_imports_and_reports_next_steps(tmp_path: Path) -> None:
+    from construction_db.bootstrap import bootstrap_workbook, format_bootstrap_summary
+    from construction_db.models import BidOpportunity, FollowUp, Project
+
+    workbook_path = _write_bootstrap_workbook(tmp_path / "bootstrap.xlsx")
+    db_path = tmp_path / "bootstrap.sqlite3"
+    engine = make_engine(db_path)
+    initialize_database(engine)
+    SessionLocal = create_session_factory(engine)
+
+    with SessionLocal() as session:
+        summary = bootstrap_workbook(session, db_path, workbook_path)
+        output = format_bootstrap_summary(summary)
+
+        assert summary.backup_path is None
+        assert summary.imported_rows["companies"] == 1
+        assert summary.imported_rows["bid_opportunities"] == 1
+        assert summary.generated_followups == 2
+        assert session.get(Project, "PR-BOOT").project_name == "Bootstrap Project"
+        assert session.get(BidOpportunity, "BD-BOOT").bid_due_date == "2026-05-20"
+        assert len(session.scalars(select(FollowUp).where(FollowUp.bid_id == "BD-BOOT")).all()) == 2
+        assert "Workbook bootstrap complete" in output
+        assert "Open the desktop app next:" in output
+
+
+def test_bootstrap_workbook_backs_up_existing_user_data(tmp_path: Path) -> None:
+    from construction_db.bootstrap import bootstrap_workbook
+
+    workbook_path = _write_bootstrap_workbook(tmp_path / "bootstrap.xlsx")
+    db_path = tmp_path / "existing.sqlite3"
+    engine = make_engine(db_path)
+    initialize_database(engine)
+    SessionLocal = create_session_factory(engine)
+
+    with SessionLocal() as session:
+        session.add(Company(company_id="CO-EXISTING", company_name="Existing GC"))
+        session.commit()
+
+        summary = bootstrap_workbook(session, db_path, workbook_path)
+
+    assert summary.backup_path is not None
+    assert summary.backup_path.exists()
+    backup_engine = make_engine(summary.backup_path)
+    BackupSession = create_session_factory(backup_engine)
+    with BackupSession() as session:
+        assert session.get(Company, "CO-EXISTING").company_name == "Existing GC"
+        assert session.get(Company, "CO-BOOT") is None
+
+
 def test_natural_key_upsert_preserves_existing_email_and_contact_ids(tmp_path: Path) -> None:
     engine = make_engine(tmp_path / "dedupe.sqlite3")
     initialize_database(engine)
@@ -467,3 +516,42 @@ def test_seed_demo_data_is_idempotent_and_searchable(tmp_path: Path) -> None:
     assert bid_count == 1
     assert search_results["projects"]
     assert "Demo data seeded" in format_demo_summary(summary_once)
+
+
+def _write_bootstrap_workbook(workbook_path: Path) -> Path:
+    with pd.ExcelWriter(workbook_path, engine="openpyxl") as writer:
+        pd.DataFrame(
+            [
+                {
+                    "Company ID": "CO-BOOT",
+                    "Company Name": "Bootstrap GC",
+                    "Company Type": "General Contractor",
+                    "Source Domain": "bootstrap.example",
+                }
+            ]
+        ).to_excel(writer, sheet_name="Companies", index=False)
+        pd.DataFrame(
+            [
+                {
+                    "Project ID": "PR-BOOT",
+                    "Project Name": "Bootstrap Project",
+                    "Job Address": "200 Bootstrap Lane",
+                    "Project Stage": "Estimating",
+                }
+            ]
+        ).to_excel(writer, sheet_name="Projects", index=False)
+        pd.DataFrame(
+            [
+                {
+                    "Bid ID": "BD-BOOT",
+                    "Project ID": "PR-BOOT",
+                    "Project Name": "Bootstrap Project",
+                    "GC Company ID": "CO-BOOT",
+                    "GC Company Name": "Bootstrap GC",
+                    "Bid Due Date": "2026-05-20",
+                    "Bid Stage": "Estimating",
+                    "Result": "Pending",
+                }
+            ]
+        ).to_excel(writer, sheet_name="Bid Opportunities", index=False)
+    return workbook_path
